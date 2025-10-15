@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UF-Themed Tax-Aware Bookkeeping</title>
+    
+    <!-- FIX: Load Tailwind CDN FIRST to define the 'tailwind' object -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Tailwind Custom Configuration & Colors (UF THEME) -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        // UF Blue (#0021A5): Main structure, links, navigation, and Accrual basis indicator
+                        'brand-blue': {
+                            50: '#F0F2FA', // Lightest shade for backgrounds
+                            500: '#0021A5', // Core UF Blue
+                            600: '#001D94',
+                            700: '#001980',
+                            800: '#00156B',
+                        },
+                        // UF Orange (#FF4A00): Primary actions, active state, main buttons
+                        'brand-orange': {
+                            50: '#FFF6F2', // Lightest shade for backgrounds
+                            500: '#FF4A00', // Core UF Orange (Accent)
+                            600: '#E04200',
+                            700: '#C23900',
+                        },
+                        // Success Dark Green (Emerald-600): Success indicators, positive balances
+                        'success-dark': {
+                            50: '#F0F9F7',
+                            500: '#047857', 
+                            600: '#036647',
+                        },
+                        // Warning Gold/Amber: Warning, Accounts Receivable, Neutral Accent
+                        'warning-gold': {
+                            50: '#FFFBF0',
+                            500: '#D97706', 
+                            600: '#B45309',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Load Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom scrollbar for transaction list */
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1; /* slate-300 */
+            border-radius: 3px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: #f1f5f9; /* slate-100 */
+        }
+        /* Style for the app wrapper to ensure full height */
+        #app-wrapper {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        /* Mobile-first: Sidebar should be full width for small screens */
+        #sidebar {
+            width: 100%;
+            height: auto;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        /* Desktop: Sidebar fixed width */
+        @media (min-width: 768px) {
+            #app-wrapper {
+                flex-direction: row;
+            }
+            #sidebar {
+                width: 256px; /* 64 * 4px = 256px */
+                height: 100%;
+                border-right: 1px solid #e2e8f0;
+                border-bottom: none;
+            }
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none; /* Controlled by JS */
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        .modal-overlay.open .modal-content {
+            transform: scale(1);
+            opacity: 1;
+        }
+        .modal-content {
+            transform: scale(0.95);
+            opacity: 0;
+            transition: all 0.2s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased">
+
+    <!-- Main Application Container -->
+    <div id="app-wrapper">
+
+        <!-- Sidebar Navigation -->
+        <nav id="sidebar" class="bg-white p-4 md:p-6 shadow-lg md:shadow-none flex flex-row md:flex-col justify-between items-center md:items-start z-10">
+            <h1 class="text-2xl font-extrabold text-brand-blue-700 tracking-tight mb-4 hidden md:block">LedgerTax Pro</h1>
+            <div class="flex flex-row md:flex-col gap-2 w-full md:w-auto">
+                <button onclick="navigate('dashboard')" id="nav-dashboard"
+                        class="nav-btn bg-brand-orange-500 text-white flex items-center p-3 rounded-xl transition hover:bg-brand-orange-600 w-full justify-center md:justify-start">
+                    <i data-lucide="layout-dashboard" class="w-5 h-5 mr-0 md:mr-2"></i>
+                    <span class="hidden md:inline">T-Accounts</span>
+                </button>
+                <button onclick="navigate('transactions')" id="nav-transactions"
+                        class="nav-btn text-gray-600 flex items-center p-3 rounded-xl transition hover:bg-gray-100 w-full justify-center md:justify-start">
+                    <i data-lucide="receipt-text" class="w-5 h-5 mr-0 md:mr-2"></i>
+                    <span class="hidden md:inline">Journal Entries</span>
+                </button>
+                <button onclick="navigate('tax-report')" id="nav-tax-report"
+                        class="nav-btn text-gray-600 flex items-center p-3 rounded-xl transition hover:bg-gray-100 w-full justify-center md:justify-start">
+                    <i data-lucide="file-text" class="w-5 h-5 mr-0 md:mr-2"></i>
+                    <span class="hidden md:inline">Taxable Income</span>
+                </button>
+                <button onclick="openSettings()" id="nav-settings"
+                        class="nav-btn text-gray-600 flex items-center p-3 rounded-xl transition hover:bg-gray-100 w-full justify-center md:justify-start">
+                    <i data-lucide="settings" class="w-5 h-5 mr-0 md:mr-2"></i>
+                    <span class="hidden md:inline">Settings</span>
+                </button>
+            </div>
+            <div id="user-info" class="mt-4 pt-4 border-t border-gray-100 hidden md:block">
+                <p class="text-xs text-gray-500">User ID:</p>
+                <code class="text-xs text-gray-700 break-all" id="display-user-id">Loading...</code>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main id="content-area" class="flex-1 p-4 md:p-8 overflow-y-auto">
+            <!-- Content will be rendered here -->
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay">
+        <div id="settings-content" class="modal-content bg-white p-6 rounded-2xl shadow-2xl max-w-lg w-full">
+            <!-- Content rendered by renderSettingsModal -->
+        </div>
+    </div>
+
+    <!-- Firebase SDKs & Application Logic (JavaScript) -->
+    <script type="module">
+        // --- FIREBASE IMPORTS ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, addDoc, onSnapshot, collection, query, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global state and constants
+        let firebaseApp, db, auth;
+        let userId = 'loading';
+        let transactions = [];
+        let currentView = 'dashboard';
+        let accountingMethod = 'Accrual'; // Default method
+        let taxRate = 0.21; // Default simplified flat tax rate (21%)
+        let isSettingsReady = false;
+
+        const APP_COLLECTION = 'journal_entries';
+        const SETTINGS_DOC = 'accounting';
+
+        // Set log level to see detailed Firestore logs in console
+        setLogLevel('Debug');
+
+        // Double-Entry Rules and IRC Tags
+        const JOURNAL_ENTRIES = {
+            'Invest': { description: "Owner invests cash", debit: "Cash", credit: "Owner's Capital", category: "Owner Equity", taxImpact: "None" },
+            'CashSale': { description: "Cash sale for services/goods", debit: "Cash", credit: "Sales Revenue", category: "Sales & Revenue", taxImpact: "Revenue" },
+            'CreditSale': { description: "Credit sale (on account)", debit: "Accounts Receivable", credit: "Sales Revenue", category: "Sales & Revenue", taxImpact: "Revenue" },
+            'CollectAR': { description: "Customer payment on account", debit: "Cash", credit: "Accounts Receivable", category: "Receivable", taxImpact: "None" }, // Recognition handled by Sale
+            'PaySupplier': { description: "Pay supplier for inventory/expenses", debit: "Accounts Payable", credit: "Cash", category: "Payable", taxImpact: "None" },
+            // Deductible Expenses (§162(a) Ordinary & Necessary)
+            'Rent': { description: "Pay for rent", debit: "Rent Expense", credit: "Cash", category: "Operating Expense", taxImpact: "Deductible Expense" },
+            'Utilities': { description: "Pay for utilities", debit: "Utilities Expense", credit: "Cash", category: "Operating Expense", taxImpact: "Deductible Expense" },
+            'SuppliesPurchase': { description: "Purchase supplies for cash", debit: "Supplies Expense", credit: "Cash", category: "Operating Expense", taxImpact: "Deductible Expense" },
+            // Capital Expenditure (§263(a) Non-deductible upon purchase)
+            'EquipmentPurchase': { description: "Purchase Equipment (Capital Expenditure)", debit: "Equipment", credit: "Cash", category: "Fixed Asset", taxImpact: "Capital Expenditure" },
+            'Drawings': { description: "Withdraw cash for personal use", debit: "Owner's Drawings", credit: "Cash", category: "Owner Equity", taxImpact: "None" },
+        };
+
+        // Standard account types for calculating balances (Debits increase these)
+        const DEBIT_BALANCE_ACCOUNTS = [
+            "Cash", "Accounts Receivable", "Inventory", "Prepaid Insurance", "Equipment",
+            "Rent Expense", "Utilities Expense", "Supplies Expense", "Salaries Expense", "Advertising Expense",
+            "Interest Expense", "Owner's Drawings", "Cost of Goods Sold"
+        ];
+
+        // --- 1. FIREBASE INITIALIZATION & AUTHENTICATION ---
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        /**
+         * Returns the Firestore document reference for user settings.
+         * Path: /artifacts/{appId}/users/{userId}/settings/accounting
+         */
+        function getSettingsDocRef() {
+            // Note: Using a subcollection 'settings' and doc 'accounting' under the user's private path.
+            return doc(db, `artifacts/${appId}/users/${userId}/settings/${SETTINGS_DOC}`);
+        }
+
+        /**
+         * Loads the user's accounting method setting from Firestore.
+         */
+        async function loadSettings() {
+            try {
+                const docRef = getSettingsDocRef();
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    accountingMethod = data.method || 'Accrual';
+                    // Load taxRate, default to 0.21 if not present, and ensure it's a number
+                    taxRate = data.taxRate ? Number(data.taxRate) : 0.21;
+                } else {
+                    // Set default setting if none exists
+                    await saveSettings('Accrual', 0.21);
+                    accountingMethod = 'Accrual';
+                    taxRate = 0.21;
+                }
+                isSettingsReady = true;
+                console.log(`Accounting Method Loaded: ${accountingMethod}, Tax Rate: ${taxRate}`);
+            } catch (error) {
+                console.error("Error loading settings:", error);
+                isSettingsReady = true; // Proceed anyway
+            }
+        }
+
+        /**
+         * Saves the user's accounting method and tax rate setting to Firestore.
+         * @param {string} method - 'Cash' or 'Accrual'.
+         * @param {number} rate - The tax rate (e.g., 0.21).
+         */
+        async function saveSettings(method, rate) {
+            try {
+                const docRef = getSettingsDocRef();
+                const numericRate = parseFloat(rate);
+
+                await setDoc(docRef, { method: method, taxRate: numericRate });
+                
+                accountingMethod = method;
+                taxRate = numericRate; // Update global state
+                
+                console.log(`Accounting Method Saved: ${accountingMethod}, Tax Rate Saved: ${taxRate}`);
+                showNotification(`Settings updated: ${method} Basis, ${(taxRate * 100).toFixed(2)}% Tax Rate.`, 'success');
+            } catch (error) {
+                console.error("Error saving settings:", error);
+                showNotification("Error: Could not save settings.", 'error');
+            }
+        }
+
+        /**
+         * Initializes Firebase and authenticates the user.
+         */
+        async function initFirebase() {
+            try {
+                if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
+                    throw new Error("Firebase configuration is missing.");
+                }
+
+                firebaseApp = initializeApp(firebaseConfig);
+                db = getFirestore(firebaseApp);
+                auth = getAuth(firebaseApp);
+
+                // Sign in using custom token or anonymously
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // Listen for Auth State Changes
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('display-user-id').textContent = userId;
+
+                        // Load settings first, then set up the listener and render
+                        await loadSettings();
+                        setupTransactionListener();
+                        renderView(currentView);
+                    } else {
+                        console.error("User is logged out.");
+                        userId = null;
+                        document.getElementById('display-user-id').textContent = 'Error: Not Signed In';
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase initialization or authentication failed:", error);
+                document.getElementById('content-area').innerHTML = `
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl relative mt-4">
+                        <strong class="font-bold">Initialization Error: </strong>
+                        <span class="block sm:inline">${error.message}. Please check Firebase configuration.</span>
+                    </div>`;
+            }
+        }
+
+        // --- 2. FIRESTORE DATA HANDLING ---
+
+        /**
+         * Returns the Firestore collection reference for the user's private data.
+         * @returns {object} Firestore CollectionReference
+         */
+        function getTransactionCollectionRef() {
+             // Path: /artifacts/{appId}/users/{userId}/journal_entries
+            return collection(db, `artifacts/${appId}/users/${userId}/${APP_COLLECTION}`);
+        }
+
+        /**
+         * Sets up a real-time listener for the user's transactions.
+         */
+        function setupTransactionListener() {
+            try {
+                const transactionsQuery = query(getTransactionCollectionRef());
+
+                onSnapshot(transactionsQuery, (snapshot) => {
+                    const newTransactions = [];
+                    snapshot.forEach((doc) => {
+                        const data = doc.data();
+                        newTransactions.push({
+                            id: doc.id,
+                            ...data,
+                            // Ensure amount is a number
+                            amount: Number(data.amount),
+                            // Clean up date format
+                            date: data.date.substring(0, 10)
+                        });
+                    });
+
+                    // Sort locally by date descending
+                    newTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                    transactions = newTransactions;
+                    console.log("Journal entries updated:", transactions.length);
+                    // Rerender the current view to reflect the changes
+                    renderView(currentView);
+                }, (error) => {
+                    console.error("Error listening to journal entries:", error);
+                });
+            } catch (error) {
+                console.error("Could not set up transaction listener:", error);
+            }
+        }
+
+        /**
+         * Adds a new journal entry to Firestore.
+         * @param {object} entryData - The journal entry object.
+         */
+        async function addTransaction(entryData) {
+            try {
+                await addDoc(getTransactionCollectionRef(), {
+                    ...entryData,
+                    date: entryData.date || new Date().toISOString().substring(0, 10),
+                    amount: Number(entryData.amount)
+                });
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                showNotification("Error: Could not save journal entry.", 'error');
+            }
+        }
+
+        /**
+         * Deletes a journal entry from Firestore.
+         * @param {string} id - The ID of the transaction document.
+         */
+        window.deleteTransaction = async function(id) {
+            try {
+                await deleteDoc(doc(getTransactionCollectionRef(), id));
+                showNotification("Journal entry deleted successfully.", 'success');
+            } catch (e) {
+                console.error("Error deleting document: ", e);
+                showNotification("Error: Could not delete journal entry.", 'error');
+            }
+        }
+
+        // --- 3. VIEW RENDERING AND NAVIGATION ---
+
+        /**
+         * Displays a temporary notification message.
+         * @param {string} message - The message to display.
+         * @param {string} type - 'success' or 'error'.
+         */
+        function showNotification(message, type) {
+            const container = document.getElementById('app-wrapper').parentNode;
+            let notification = document.getElementById('app-notification');
+
+            if (!notification) {
+                notification = document.createElement('div');
+                notification.id = 'app-notification';
+                notification.className = 'fixed top-4 right-4 z-50 transition-opacity duration-300';
+                container.appendChild(notification);
+            }
+
+            // Using the custom colors for notifications
+            const bgColor = type === 'success' ? 'bg-success-dark-50 border-success-dark-500 text-success-dark-600' : 'bg-red-100 border-red-400 text-red-700';
+            const icon = type === 'success' ? '<i data-lucide="check-circle" class="w-5 h-5 mr-2"></i>' : '<i data-lucide="x-circle" class="w-5 h-5 mr-2"></i>';
+
+            notification.innerHTML = `
+                <div class="p-4 rounded-xl border shadow-lg flex items-center ${bgColor}">
+                    ${icon}
+                    <span>${message}</span>
+                </div>
+            `;
+            lucide.createIcons();
+
+            setTimeout(() => {
+                notification.innerHTML = '';
+            }, 3000);
+        }
+
+        /**
+         * Main function to navigate between views.
+         * @param {string} viewName - 'dashboard', 'transactions', or 'tax-report'.
+         */
+        window.navigate = function(viewName) {
+            currentView = viewName;
+
+            // Update active state in sidebar (using brand-orange for active)
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-brand-orange-500', 'text-white');
+                btn.classList.add('text-gray-600', 'hover:bg-gray-100');
+            });
+            const activeBtn = document.getElementById(`nav-${viewName}`);
+            if (activeBtn) {
+                activeBtn.classList.add('bg-brand-orange-500', 'text-white');
+                activeBtn.classList.remove('text-gray-600', 'hover:bg-gray-100');
+            }
+
+            renderView(viewName);
+        }
+
+        /**
+         * Renders the content for the current view.
+         */
+        function renderView(viewName) {
+            const contentArea = document.getElementById('content-area');
+            contentArea.innerHTML = ''; // Clear existing content
+
+            switch (viewName) {
+                case 'dashboard':
+                    renderDashboard(contentArea);
+                    break;
+                case 'transactions':
+                    renderTransactions(contentArea);
+                    break;
+                case 'tax-report':
+                    renderTaxReport(contentArea);
+                    break;
+                default:
+                    renderDashboard(contentArea);
+            }
+            lucide.createIcons(); // Initialize Lucide icons for new content
+        }
+
+        // --- 4. DATA CALCULATION UTILITIES (T-ACCOUNT LEDGER) ---
+
+        /**
+         * Calculates T-Account balances based on all journal entries.
+         * @returns {Map<string, number>} Map of account names to their final balances.
+         */
+        function calculateAccountBalances() {
+            const ledger = new Map();
+
+            transactions.forEach(t => {
+                const amount = t.amount;
+                const debitAcct = t.debitAccount;
+                const creditAcct = t.creditAccount;
+
+                // 1. Process Debit (Increases the account balance)
+                ledger.set(debitAcct, (ledger.get(debitAcct) || 0) + amount);
+
+                // 2. Process Credit (Decreases the account balance)
+                ledger.set(creditAcct, (ledger.get(creditAcct) || 0) - amount);
+            });
+
+            return ledger;
+        }
+
+        /**
+         * Formats a number as currency.
+         */
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2
+            }).format(value);
+        }
+        
+        // --- 5. RENDER FUNCTIONS FOR VIEWS ---
+
+        /**
+         * Renders the Settings Modal.
+         */
+        window.openSettings = function() {
+            const modal = document.getElementById('settings-modal');
+            const content = document.getElementById('settings-content');
+
+            content.innerHTML = `
+                <h3 class="text-2xl font-bold text-gray-900 mb-4 flex items-center">
+                    <i data-lucide="settings" class="w-6 h-6 mr-2 text-brand-blue-500"></i>
+                    IRC Accounting Settings
+                </h3>
+                <form id="settings-form">
+                    <p class="text-sm text-gray-600 mb-6">
+                        Configure your mandatory tax accounting method and flat tax rate.
+                    </p>
+
+                    <!-- Accounting Method -->
+                    <div class="mb-6">
+                        <label class="block text-lg font-semibold text-gray-800 mb-2">Accounting Method</label>
+                        <div class="mt-2 space-y-4">
+                            <label class="flex items-center p-4 bg-gray-50 rounded-xl border border-gray-200 cursor-pointer hover:bg-success-dark-50 transition">
+                                <input type="radio" name="accountingMethod" value="Cash" class="form-radio h-5 w-5 text-brand-blue-600" ${accountingMethod === 'Cash' ? 'checked' : ''}>
+                                <div class="ml-3">
+                                    <p class="text-sm font-medium text-gray-900">Cash Basis</p>
+                                    <p class="text-xs text-gray-500">Recognize revenue when **cash is received** and expenses when **cash is paid**.</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center p-4 bg-gray-50 rounded-xl border border-gray-200 cursor-pointer hover:bg-brand-blue-50 transition">
+                                <input type="radio" name="accountingMethod" value="Accrual" class="form-radio h-5 w-5 text-brand-blue-600" ${accountingMethod === 'Accrual' ? 'checked' : ''}>
+                                <div class="ml-3">
+                                    <p class="text-sm font-medium text-gray-900">Accrual Basis</p>
+                                    <p class="text-xs text-gray-500">Recognize revenue when **earned** (invoice issued) and expenses when **incurred**.</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Tax Rate Input -->
+                    <div class="mb-6">
+                        <label class="block text-lg font-semibold text-gray-800 mb-2" for="taxRateInput">Flat Tax Rate (e.g., 0.21 for 21%)</label>
+                        <p class="text-xs text-gray-500 mb-2">A simplified flat rate for calculating tax liability on taxable net income.</p>
+                        <input type="number" id="taxRateInput" name="taxRate" required step="0.01" min="0.00" max="1.00" value="${taxRate}"
+                            class="w-full p-2 border border-gray-300 rounded-xl focus:ring-brand-blue-500 focus:border-brand-blue-500 transition">
+                    </div>
+
+                    <div class="flex justify-end gap-3 pt-4 border-t mt-4">
+                        <button type="button" onclick="closeSettings()" class="px-4 py-2 text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition">Cancel</button>
+                        <button type="submit" class="px-6 py-2 bg-brand-orange-600 text-white font-semibold rounded-xl hover:bg-brand-orange-700 transition">Save Settings</button>
+                    </div>
+                </form>
+            `;
+            lucide.createIcons();
+
+            document.getElementById('settings-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const selectedMethod = document.querySelector('input[name="accountingMethod"]:checked').value;
+                const inputRate = document.getElementById('taxRateInput').value;
+                
+                // Pass both values to saveSettings
+                saveSettings(selectedMethod, inputRate);
+                closeSettings();
+            });
+
+            modal.classList.add('open');
+            modal.style.display = 'flex';
+        }
+
+        window.closeSettings = function() {
+            const modal = document.getElementById('settings-modal');
+            modal.classList.remove('open');
+            setTimeout(() => {
+                modal.style.display = 'none';
+                renderView(currentView); // Rerender current view if needed
+            }, 200);
+        }
+
+        /**
+         * Renders the Dashboard view (T-Accounts).
+         */
+        function renderDashboard(container) {
+            const balances = calculateAccountBalances();
+            const accountsArray = Array.from(balances.entries())
+                .filter(([name, balance]) => Math.abs(balance) > 0.005)
+                .map(([name, balance]) => {
+                    const isDebit = DEBIT_BALANCE_ACCOUNTS.includes(name);
+                    let balanceType = 'Debit';
+                    let displayBalance = balance;
+                    let textColor = 'text-success-dark-600'; // Default to success/positive green
+
+                    if (!isDebit) {
+                        balanceType = 'Credit';
+                        displayBalance = -balance;
+                        textColor = 'text-brand-blue-600'; // Credit accounts use the brand blue
+                    }
+
+                    if (balance < 0 && isDebit) { // e.g., Negative cash balance
+                         textColor = 'text-red-600'; // Use standard red for true negative
+                    }
+                    if (balance > 0 && !isDebit) { // e.g., Debit balance on Revenue
+                         textColor = 'text-red-600';
+                         balanceType = 'Debit';
+                         displayBalance = balance;
+                    }
+
+                    return { name, balance: displayBalance, balanceType, textColor };
+                });
+
+            const cash = accountsArray.find(a => a.name === 'Cash');
+
+            container.innerHTML = `
+                <div class="max-w-6xl mx-auto">
+                    <h2 class="text-3xl font-bold text-gray-900 mb-6 flex items-center">
+                        <i data-lucide="scale" class="w-6 h-6 mr-2 text-brand-blue-500"></i>
+                        General Ledger Balances (T-Accounts)
+                    </h2>
+
+                    <!-- Accounting Method Disclosure -->
+                    <div class="p-3 mb-6 rounded-xl border-l-4 ${accountingMethod === 'Accrual' ? 'border-brand-blue-500 bg-brand-blue-50' : 'border-success-dark-500 bg-success-dark-50'}">
+                        <p class="text-sm font-semibold text-gray-800">Accounting Method: <span class="font-extrabold">${accountingMethod} Basis</span></p>
+                        <p class="text-xs text-gray-600">This affects how income is recognized on your tax report (§451).</p>
+                    </div>
+
+                    <!-- Key Balances -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <!-- Card: Cash Balance (Success/Dark Green) -->
+                        <div class="bg-white p-6 rounded-2xl shadow-lg border-l-4 border-success-dark-500">
+                            <p class="text-sm font-medium text-gray-500">Cash Balance</p>
+                            <p class="mt-1 text-3xl font-extrabold ${cash ? cash.textColor : 'text-gray-400'}">${cash ? formatCurrency(cash.balance) : formatCurrency(0)}</p>
+                            <span class="text-xs text-gray-400">${cash ? cash.balanceType : 'No entries'}</span>
+                        </div>
+                        <!-- Card: Accounts Receivable (Warning/Gold) -->
+                        <div class="bg-white p-6 rounded-2xl shadow-lg border-l-4 border-warning-gold-500">
+                            <p class="text-sm font-medium text-gray-500">Accounts Receivable</p>
+                            ${(ar => `
+                                <p class="mt-1 text-3xl font-extrabold ${ar ? ar.textColor : 'text-gray-400'}">${ar ? formatCurrency(ar.balance) : formatCurrency(0)}</p>
+                                <span class="text-xs text-gray-400">${ar ? ar.balanceType : 'No entries'}</span>
+                            `)(accountsArray.find(a => a.name === 'Accounts Receivable'))}
+                        </div>
+                        <!-- Card: Fixed Assets (Equipment) (Red for Capital/Non-Deductible) -->
+                        <div class="bg-white p-6 rounded-2xl shadow-lg border-l-4 border-red-500">
+                            <p class="text-sm font-medium text-gray-500">Equipment (Asset Basis)</p>
+                            ${(eq => `
+                                <p class="mt-1 text-3xl font-extrabold ${eq ? 'text-red-600' : 'text-gray-400'}">${eq ? formatCurrency(eq.balance) : formatCurrency(0)}</p>
+                                <span class="text-xs text-gray-400">Capital Basis (§1012)</span>
+                            `)(accountsArray.find(a => a.name === 'Equipment'))}
+                        </div>
+                    </div>
+
+                    <!-- Detailed Balances Table -->
+                    <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
+                        <h3 class="text-xl font-semibold text-gray-900 mb-4">Detailed Account Balances</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tl-xl">Account</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Nature</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tr-xl">Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-100">
+                                    ${accountsArray.map(a => `
+                                        <tr class="hover:bg-gray-50 transition">
+                                            <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${a.name}</td>
+                                            <td class="px-4 py-3 whitespace-nowrap text-sm text-right">
+                                                <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${a.balanceType === 'Debit' ? 'bg-success-dark-100 text-success-dark-700' : 'bg-brand-blue-100 text-brand-blue-700'}">
+                                                    ${a.balanceType}
+                                                </span>
+                                            </td>
+                                            <td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-right ${a.textColor}">
+                                                ${formatCurrency(a.balance)}
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                    ${accountsArray.length === 0 ? `
+                                        <tr>
+                                            <td colspan="3" class="text-center py-6 text-gray-500">No journal entries recorded to calculate balances.</td>
+                                        </tr>
+                                    ` : ''}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+         * Renders the Journal Entries view (List + Form).
+         */
+        function renderTransactions(container) {
+            // Generate options for the journal entry select input
+            const entryOptions = Object.entries(JOURNAL_ENTRIES).map(([key, value]) => `
+                <option value="${key}">${value.description} (Dr: ${value.debit} / Cr: ${value.credit})</option>
+            `).join('');
+
+
+            container.innerHTML = `
+                <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Form Column -->
+                    <div class="lg:col-span-1">
+                        <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 sticky top-0">
+                            <h3 class="text-xl font-bold text-gray-900 mb-6">Record New Journal Entry</h3>
+                            <form id="add-transaction-form">
+                                <div class="mb-4">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1" for="journalType">Journal Entry Type</label>
+                                    <select id="journalType" name="journalType" required
+                                        class="w-full p-2 border border-gray-300 rounded-xl focus:ring-brand-blue-500 focus:border-brand-blue-500 transition">
+                                        <option value="" disabled selected>Select a Transaction Type</option>
+                                        ${entryOptions}
+                                    </select>
+                                </div>
+                                <div class="mb-4">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1" for="date">Date</label>
+                                    <input type="date" id="date" name="date" required value="${new Date().toISOString().substring(0, 10)}"
+                                        class="w-full p-2 border border-gray-300 rounded-xl focus:ring-brand-blue-500 focus:border-brand-blue-500 transition">
+                                </div>
+                                <div class="mb-4">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1" for="description">Memo / Detail</label>
+                                    <input type="text" id="description" name="description" required placeholder="Add details (e.g., paid rent for Oct)"
+                                        class="w-full p-2 border border-gray-300 rounded-xl focus:ring-brand-blue-500 focus:border-brand-blue-500 transition">
+                                </div>
+                                <div class="mb-6">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1" for="amount">Amount (USD)</label>
+                                    <input type="number" id="amount" name="amount" required step="0.01" min="0.01" placeholder="0.00"
+                                        class="w-full p-2 border border-gray-300 rounded-xl focus:ring-brand-blue-500 focus:border-brand-blue-500 transition">
+                                </div>
+                                <button type="submit" class="w-full bg-brand-orange-600 text-white font-semibold p-3 rounded-xl hover:bg-brand-orange-700 transition shadow-md">
+                                    <i data-lucide="sheet" class="w-5 h-5 inline mr-2"></i> Post Journal Entry
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- List Column -->
+                    <div class="lg:col-span-2">
+                        <h2 class="text-3xl font-bold text-gray-900 mb-6">General Journal (${transactions.length} Entries)</h2>
+                        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 h-[70vh] custom-scroll overflow-y-auto">
+                            <div class="p-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between font-semibold text-sm text-gray-700 sticky top-0">
+                                <span class="w-1/4">Date / Memo</span>
+                                <span class="w-1/4">Debit Account</span>
+                                <span class="w-1/4 text-right">Credit Account</span>
+                                <span class="w-1/4 text-right pr-12">Amount</span>
+                                <span class="w-12"></span>
+                            </div>
+                            <ul id="transaction-list" class="divide-y divide-gray-100">
+                                ${transactions.length > 0 ? transactions.map(t => `
+                                    <li class="flex items-start justify-between p-4 hover:bg-gray-50 transition">
+                                        <!-- Date / Memo -->
+                                        <div class="w-1/4 min-w-0 pr-2">
+                                            <p class="text-xs text-gray-500 mb-1">${t.date}</p>
+                                            <p class="font-medium text-gray-800">${t.description}</p>
+                                        </div>
+
+                                        <!-- Debit -->
+                                        <div class="w-1/4 min-w-0 pr-2">
+                                            <p class="text-sm font-semibold text-success-dark-600 flex items-center">
+                                                <i data-lucide="arrow-up-right" class="w-3 h-3 mr-1"></i> ${t.debitAccount}
+                                            </p>
+                                            <p class="text-xs text-gray-400">${JOURNAL_ENTRIES[t.journalType]?.taxImpact || 'N/A'}</p>
+                                        </div>
+
+                                        <!-- Credit -->
+                                        <div class="w-1/4 min-w-0 pr-2 text-right">
+                                            <p class="text-sm font-semibold text-brand-blue-600 flex items-center justify-end">
+                                                <i data-lucide="arrow-down-left" class="w-3 h-3 mr-1"></i> ${t.creditAccount}
+                                            </p>
+                                        </div>
+
+                                        <!-- Amount -->
+                                        <div class="w-1/4 text-right pr-4">
+                                            <p class="font-bold text-gray-900">${formatCurrency(t.amount)}</p>
+                                        </div>
+
+                                        <!-- Delete Button -->
+                                        <button onclick="deleteTransaction('${t.id}')"
+                                                class="w-12 p-2 text-gray-400 hover:text-red-500 transition rounded-full hover:bg-red-50"
+                                                title="Delete Entry">
+                                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                        </button>
+                                    </li>
+                                `).join('') : `
+                                    <li class="p-8 text-center text-gray-500">
+                                        <i data-lucide="book-open-text" class="w-10 h-10 mx-auto mb-2 text-gray-300"></i>
+                                        <p>Your general journal is empty. Start posting entries!</p>
+                                    </li>
+                                `}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Attach event listener to the form after rendering
+            document.getElementById('add-transaction-form').addEventListener('submit', handleAddTransaction);
+        }
+
+        /**
+         * Handles the form submission for adding a new journal entry.
+         */
+        function handleAddTransaction(event) {
+            event.preventDefault();
+            const form = event.target;
+            const journalTypeKey = form.journalType.value;
+            const entryRule = JOURNAL_ENTRIES[journalTypeKey];
+
+            if (!entryRule) {
+                 showNotification("Invalid journal entry type selected.", 'error');
+                 return;
+            }
+
+            const newEntry = {
+                journalType: journalTypeKey,
+                date: form.date.value,
+                description: form.description.value.trim(),
+                amount: parseFloat(form.amount.value),
+                debitAccount: entryRule.debit,
+                creditAccount: entryRule.credit,
+                taxImpact: entryRule.taxImpact // Storing tax impact with the transaction
+            };
+
+            if (isNaN(newEntry.amount) || newEntry.amount <= 0) {
+                showNotification("Please enter a valid amount greater than zero.", 'error');
+                return;
+            }
+
+            addTransaction(newEntry)
+                .then(() => {
+                    showNotification("Journal entry posted successfully!", 'success');
+                    // Keep the selected type but reset date, description, and amount
+                    form.date.value = new Date().toISOString().substring(0, 10);
+                    form.description.value = '';
+                    form.amount.value = '';
+                })
+                .catch(error => {
+                    console.error("Failed to post entry:", error);
+                    showNotification("Failed to save journal entry. See console for details.", 'error');
+                });
+        }
+
+
+        /**
+         * Renders the Taxable Income Report view.
+         */
+        function renderTaxReport(container) {
+            // Aggregate all transactions by their tax impact
+            const taxAggregates = {
+                Revenue: 0,
+                DeductibleExpense: 0,
+                CapitalExpenditure: 0,
+                None: 0
+            };
+
+            transactions.forEach(t => {
+                const impact = t.taxImpact || 'None';
+                // Revenue and Expenses are both debited/credited by positive amounts in the journal entries.
+                // We assume amounts are recorded correctly as positive numbers representing the value of the transaction.
+                // Revenue increases income (taxable), Expense decreases income (deduction).
+                const amount = t.amount;
+
+                if (impact === 'Revenue') {
+                    taxAggregates.Revenue += amount;
+                } else if (impact === 'Deductible Expense') {
+                    taxAggregates.DeductibleExpense += amount;
+                } else if (impact === 'Capital Expenditure') {
+                    taxAggregates.CapitalExpenditure += amount;
+                }
+            });
+
+            const grossIncome = taxAggregates.Revenue;
+            const totalDeductions = taxAggregates.DeductibleExpense;
+            const taxableNetIncome = grossIncome - totalDeductions;
+            
+            // --- TAX COMPUTATION ---
+            let taxLiability = 0;
+            // Only apply tax rate if Taxable Net Income is positive
+            if (taxableNetIncome > 0) {
+                taxLiability = taxableNetIncome * taxRate;
+            }
+            
+            const netProfitAfterTax = taxableNetIncome - taxLiability;
+
+
+            container.innerHTML = `
+                <div class="max-w-4xl mx-auto">
+                    <h2 class="text-3xl font-bold text-gray-900 mb-6 flex items-center">
+                        <i data-lucide="file-text" class="w-6 h-6 mr-2 text-brand-blue-500"></i>
+                        Taxable Income Report
+                    </h2>
+                    <div class="p-3 mb-6 rounded-xl border-l-4 ${accountingMethod === 'Accrual' ? 'border-brand-blue-500 bg-brand-blue-50' : 'border-success-dark-500 bg-success-dark-50'}">
+                        <p class="text-sm font-semibold text-gray-800">Accounting Method for Income Recognition: <span class="font-extrabold">${accountingMethod} Basis (§451)</span></p>
+                        <p class="text-xs text-gray-600">The current report reflects revenue and expense recognition based on this method.</p>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
+
+                        <!-- REVENUE (Gross Income §61) -->
+                        <h3 class="text-2xl font-semibold text-gray-800 mb-4">Gross Income (§61)</h3>
+                        <div class="flex justify-between items-center py-2 border-b border-dashed">
+                            <span class="font-medium text-gray-700 pl-4">Sales Revenue (Taxable)</span>
+                            <span class="font-semibold text-lg text-success-dark-600">${formatCurrency(grossIncome)}</span>
+                        </div>
+                        <div class="flex justify-between items-center py-2 border-b border-brand-blue-200 mb-6">
+                            <span class="font-extrabold text-lg text-brand-blue-800">TOTAL GROSS INCOME</span>
+                            <span class="font-extrabold text-xl text-brand-blue-800">${formatCurrency(grossIncome)}</span>
+                        </div>
+
+
+                        <!-- EXPENSES (Deductions §162(a)) -->
+                        <h3 class="text-2xl font-semibold text-gray-800 mt-6 mb-4">Deductible Expenses (§162(a))</h3>
+                        <div class="space-y-1">
+                            ${transactions.filter(t => t.taxImpact === 'Deductible Expense').map(t => `
+                                <div class="flex justify-between items-center py-1 border-b border-dashed">
+                                    <span class="text-gray-600 pl-4">${t.debitAccount} (via: ${t.description})</span>
+                                    <span class="text-red-600">${formatCurrency(t.amount)}</span>
+                                </div>
+                            `).join('')}
+                            ${totalDeductions === 0 ? '<p class="text-center text-gray-500 py-4">No deductible expenses recorded.</p>' : ''}
+                        </div>
+                        <div class="flex justify-between items-center py-2 border-b border-red-200 mt-4 mb-6">
+                            <span class="font-extrabold text-lg text-red-800">TOTAL DEDUCTIONS</span>
+                            <span class="font-extrabold text-xl text-red-800">${formatCurrency(totalDeductions)}</span>
+                        </div>
+
+                        <!-- TAXABLE NET INCOME/LOSS -->
+                        <div class="flex justify-between items-center py-4 bg-gray-50 rounded-lg p-4 shadow-inner">
+                            <span class="font-extrabold text-xl text-gray-900">TAXABLE NET INCOME / (LOSS)</span>
+                            <span class="font-extrabold text-2xl ${taxableNetIncome >= 0 ? 'text-success-dark-700' : 'text-red-700'}">
+                                ${formatCurrency(taxableNetIncome)}
+                            </span>
+                        </div>
+
+                        <!-- TAX COMPUTATION (§11 - Corporate Tax Rate) -->
+                        <h3 class="text-2xl font-semibold text-gray-800 mt-8 mb-4 border-t pt-4">Tax Computation (§11)</h3>
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center py-2 border-b border-dashed bg-gray-50 p-2 rounded-md">
+                                <span class="font-bold text-gray-700 pl-4">Applicable Tax Rate (From Settings)</span>
+                                <span class="font-bold text-lg text-brand-blue-700">${(taxRate * 100).toFixed(2)}%</span>
+                            </div>
+
+                            <div class="flex justify-between items-center py-2 border-b border-brand-orange-200">
+                                <span class="font-extrabold text-lg text-brand-orange-800">TAX LIABILITY DUE</span>
+                                <span class="font-extrabold text-xl ${taxLiability > 0 ? 'text-red-700' : 'text-gray-500'}">(${formatCurrency(taxLiability)})</span>
+                            </div>
+                        </div>
+
+                        <!-- NET PROFIT AFTER TAX -->
+                        <div class="flex justify-between items-center py-4 mt-6 bg-brand-blue-50 rounded-lg p-4 shadow-xl border-t-4 border-brand-blue-500">
+                            <span class="font-extrabold text-2xl text-gray-900">NET PROFIT AFTER TAX</span>
+                            <span class="font-extrabold text-3xl ${netProfitAfterTax >= 0 ? 'text-success-dark-700' : 'text-red-700'}">
+                                ${formatCurrency(netProfitAfterTax)}
+                            </span>
+                        </div>
+
+                        <!-- CAPITAL EXPENDITURE DISCLOSURE (§263(a)) -->
+                        <div class="mt-8 p-4 bg-warning-gold-50 border-l-4 border-warning-gold-500 rounded-lg">
+                            <p class="font-semibold text-lg text-gray-800 mb-1">Capital Expenditures Disclosure (§263(a))</p>
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-gray-700">Total Asset Basis Recognized:</span>
+                                <span class="font-bold">${formatCurrency(taxAggregates.CapitalExpenditure)}</span>
+                            </div>
+                            <p class="text-xs text-gray-600 mt-2">
+                                *Note: These costs are **not** immediately deductible. They must be capitalized and recovered over time through **Depreciation** (§167-168) or expensed using **§179** or **Bonus Depreciation** rules.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- 6. INITIALIZATION ---
+        window.onload = function() {
+            initFirebase();
+            navigate('dashboard'); // Start on the dashboard view
+        };
+
+    </script>
+</body>
+</html>
